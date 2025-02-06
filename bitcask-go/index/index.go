@@ -11,6 +11,30 @@ type Indexer interface {
 	Delete(key []byte) bool
 }
 
+type IndexType = int8
+
+const (
+	//B树的索引
+	BTreeType IndexType = iota + 1
+
+	//自适应基数树
+	ART
+)
+
+// 用于初始化索引的方法
+func NewIndexer(typ IndexType) Indexer {
+	switch typ {
+	case BTreeType:
+		return NewBtree()
+	case ART:
+		//TODO
+		return nil
+	default:
+		panic("unknown index type")
+		return nil
+	}
+}
+
 type Item struct {
 	key []byte
 	pos *data.LogRecordPos

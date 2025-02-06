@@ -1,8 +1,10 @@
 package bitcask_go
 
 import (
+	"errors"
 	"kv_storage/bitcask-go/data"
 	"kv_storage/bitcask-go/index"
+	"os"
 	"sync"
 )
 
@@ -36,6 +38,35 @@ func (db *DB) Put(key []byte, value []byte) error {
 	}
 
 	return nil
+}
+func checkOption(option Options) error {
+	if option.DirPath == "" {
+		return errors.New("dirPath is empty")
+	}
+	if option.MaxFileSize <= 0 {
+		return errors.New("max file size is zero")
+	}
+	return nil
+}
+func Open(option Options) (*DB, error) {
+	//检查配置是否有问题
+	if err := checkOption(option); err != nil {
+		return nil, err
+	}
+	//检验传入的数据目录是否存在，若不存在，生成文件目录
+	if _, err := os.Stat(option.DirPath); err != nil {
+		return nil, err
+	}
+	//初始化数据库实例
+	db := &DB{
+		option:   option,
+		mu:       new(sync.RWMutex),
+		oldFiles: make(map[uint32]*data.DataFile),
+		indexer:  index.NewIndexer(index.IndexType(option.IndexType)),
+	}
+	//加载数据文件
+
+	return db, nil
 }
 func (db *DB) AppendLogRecord(LogRecord *data.LogRecord) (*data.LogRecordPos, error) {
 	db.mu.Lock()
@@ -83,9 +114,9 @@ func (db *DB) setActiveFile() error {
 		initialFileId = db.activeFile.FileId + 1
 	}
 
-	datafile, errors := data.OpenDataFile(db.option.DirPath, initialFileId)
-	if errors != nil {
-		return errors
+	datafile, err := data.OpenDataFile(db.option.DirPath, initialFileId)
+	if err != nil {
+		return err
 	}
 	db.activeFile = datafile
 	return nil
