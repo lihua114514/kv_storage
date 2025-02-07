@@ -67,7 +67,7 @@ func Open(option Options) (*DB, error) {
 		option:   option,
 		mu:       new(sync.RWMutex),
 		oldFiles: make(map[uint32]*data.DataFile),
-		indexer:  index.NewIndexer(index.IndexType(option.IndexType)),
+		indexer:  index.NewIndexer(option.IndexType),
 	}
 	//加载数据文件
 	if err := db.loadDatafile(); err != nil {
@@ -154,10 +154,14 @@ func (db *DB) loadIndexDatafile() error {
 				Fid:    fid,
 				Offset: offset,
 			}
+			var ok bool
 			if LogRecord.Type != data.LOG_RECORD_TYPE_NOMAL {
-				db.indexer.Delete(LogRecord.Key)
+				ok = db.indexer.Delete(LogRecord.Key)
 			} else {
-				db.indexer.Put(LogRecord.Key, &LogRecord_)
+				ok = db.indexer.Put(LogRecord.Key, &LogRecord_)
+			}
+			if ok != true {
+				return index.IndexUpdateFail
 			}
 			offset += size
 		}
@@ -252,6 +256,31 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	}
 	return buffer.Val, nil
 }
-func (db *DB) Delete(key []byte) bool {
-	return false
+func (db *DB) Delete(key []byte) error {
+	//判断key
+	if len(key) == 0 {
+		return index.KeyIsEmpty
+	}
+	//先查找内存中是否存在该键
+	if db.indexer.Get(key) == nil {
+		//若不存在该键，直接返回
+		return nil
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	LogRecord_ := &data.LogRecord{
+		Key:  key,
+		Type: data.LOG_RECORD_TYPE_DLETED,
+	}
+	_, err := db.AppendLogRecord(LogRecord_)
+	if err != nil {
+		return err
+	}
+	//存入内存索引
+	if ok := db.indexer.Delete(key); !ok {
+		return index.IndexUpdateFail
+	}
+
+	return nil
 }
