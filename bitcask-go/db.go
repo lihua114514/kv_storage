@@ -2,9 +2,13 @@ package bitcask_go
 
 import (
 	"errors"
+	"io"
 	"kv_storage/bitcask-go/data"
 	"kv_storage/bitcask-go/index"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -12,6 +16,7 @@ type DB struct {
 	option     Options
 	mu         *sync.RWMutex
 	activeFile *data.DataFile
+	fileIDs    []int //目录下的数据文件，只能在加载数据的时候使用
 	oldFiles   map[uint32]*data.DataFile
 	indexer    index.Indexer
 }
@@ -65,8 +70,103 @@ func Open(option Options) (*DB, error) {
 		indexer:  index.NewIndexer(index.IndexType(option.IndexType)),
 	}
 	//加载数据文件
+	if err := db.loadDatafile(); err != nil {
+		return nil, err
+	}
 
+	//从数据文件中加载索引
+	if err := db.loadIndexDatafile(); err != nil {
+		return nil, err
+	}
 	return db, nil
+}
+
+// 从磁盘中加载数据文件
+func (db *DB) loadDatafile() error {
+	files, err := os.ReadDir(db.option.DirPath)
+	if err != nil {
+		return err
+	}
+	//存放文件ID的数组
+	var FileIDs []int
+	//寻找以.data为结尾的文件
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), data.DataFilesuffix) {
+			FileName := strings.Split(file.Name(), ".")
+			FileId, err := strconv.Atoi(FileName[0])
+			if err != nil {
+				return index.DataFileERROR
+			}
+			FileIDs = append(FileIDs, FileId)
+		}
+
+	}
+	//对数据文件进行排序
+	sort.Ints(FileIDs)
+	db.fileIDs = FileIDs
+
+	//遍历每个文件
+	for i, FileID := range FileIDs {
+		datafile, err := data.OpenDataFile(db.option.DirPath, uint32(FileID))
+		if err != nil {
+			return err
+		}
+		//设置最后一个文件为活跃文件
+		if i == len(FileIDs)-1 {
+			//是最后一个文件
+			db.activeFile = datafile
+		} else {
+			//不是最后一个文件设置将文件设置为老文件
+			db.oldFiles[uint32(i)] = datafile
+		}
+
+	}
+	return nil
+}
+
+// 从数据文件中加载索引
+// 便利索所有数据文件并加载到内存中
+func (db *DB) loadIndexDatafile() error {
+	if len(db.fileIDs) == 0 {
+		//该数据库为空不做处理
+		return nil
+	}
+	for i, fileID := range db.fileIDs {
+		var datafile *data.DataFile
+		var fid = uint32(fileID)
+		//将datafile 取出
+		if fid == db.activeFile.FileId {
+			datafile = db.activeFile
+		} else {
+			datafile = db.oldFiles[fid]
+		}
+		//将读取的文件中的信息传入内存索引
+		var offset uint32 = 0
+		for {
+			LogRecord, size, err := datafile.ReadDataFile(offset)
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				return err
+			}
+
+			LogRecord_ := data.LogRecordPos{
+				Fid:    fid,
+				Offset: offset,
+			}
+			if LogRecord.Type != data.LOG_RECORD_TYPE_NOMAL {
+				db.indexer.Delete(LogRecord.Key)
+			} else {
+				db.indexer.Put(LogRecord.Key, &LogRecord_)
+			}
+			offset += size
+		}
+		if i == len(db.fileIDs)-1 {
+			db.activeFile.WriteOffset = offset
+		}
+
+	}
+	return nil
 }
 func (db *DB) AppendLogRecord(LogRecord *data.LogRecord) (*data.LogRecordPos, error) {
 	db.mu.Lock()
@@ -143,7 +243,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, index.DataFileNotExists
 	}
 	//根据偏移量读取数据
-	buffer, err := dataFile.ReadDataFile(logRecordPos.Offset)
+	buffer, _, err := dataFile.ReadDataFile(logRecordPos.Offset)
 	if err != nil {
 		return nil, err
 	}

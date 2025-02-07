@@ -2,6 +2,8 @@ package data
 
 import "kv_storage/bitcask-go/fio"
 
+const DataFilesuffix = ".data"
+
 type DataFile struct {
 	FileId      uint32       //文件的ID
 	WriteOffset uint32       //偏移
@@ -13,8 +15,8 @@ func OpenDataFile(DirPath string, FileID uint32) (*DataFile, error) {
 	return nil, nil
 }
 
-func (df *DataFile) ReadDataFile(offset uint32) (*LogRecord, error) {
-	return nil, nil
+func (df *DataFile) ReadDataFile(offset uint32) (*LogRecord, uint32, error) {
+	return nil, 0, nil
 }
 
 // 进行编码返回字节数组和数字

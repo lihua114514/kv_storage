@@ -8,4 +8,5 @@ var (
 	IndexNotFound     = errors.New("index not found")
 	DataFileNotExists = errors.New("data file not exists")
 	KeyNotExists      = errors.New("key not exists")
+	DataFileERROR     = errors.New("data file error other file exists")
 )
