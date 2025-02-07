@@ -5,9 +5,9 @@ import "kv_storage/bitcask-go/fio"
 const DataFilesuffix = ".data"
 
 type DataFile struct {
-	FileId      uint32       //文件的ID
-	WriteOffset uint32       //偏移
-	IoManger    fio.IoManger //用于文件IO
+	FileId      uint32        //文件的ID
+	WriteOffset uint32        //偏移
+	IoManger    fio.IOManager //用于文件IO
 }
 
 func OpenDataFile(DirPath string, FileID uint32) (*DataFile, error) {

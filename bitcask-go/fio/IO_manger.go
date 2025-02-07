@@ -6,7 +6,7 @@ type FileIO struct {
 	fd *os.File
 }
 
-func NewIOManager(filename string) (*FileIO, error) {
+func NewFileIOManager(filename string) (*FileIO, error) {
 	fid, err := os.OpenFile(
 		filename,
 		os.O_CREATE|os.O_APPEND|os.O_RDWR,
@@ -30,3 +30,5 @@ func (fio *FileIO) Read(p []byte, offset int64) (n int, err error) {
 func (fio *FileIO) Write(p []byte) (n int, err error) {
 	return fio.fd.Write(p)
 }
+
+//初始化I/O方法
