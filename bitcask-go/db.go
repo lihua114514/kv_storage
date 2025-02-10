@@ -23,7 +23,7 @@ type DB struct {
 
 func (db *DB) Put(key []byte, value []byte) error {
 	if len(key) == 0 {
-		return index.KeyIsEmpty
+		return KeyIsEmpty
 	}
 
 	//构造LogRecord结构体
@@ -39,7 +39,7 @@ func (db *DB) Put(key []byte, value []byte) error {
 	}
 	//存入内存索引
 	if ok := db.indexer.Put(key, pos); !ok {
-		return index.IndexUpdateFail
+		return IndexUpdateFail
 	}
 
 	return nil
@@ -95,7 +95,7 @@ func (db *DB) loadDatafile() error {
 			FileName := strings.Split(file.Name(), ".")
 			FileId, err := strconv.Atoi(FileName[0])
 			if err != nil {
-				return index.DataFileERROR
+				return DataFileERROR
 			}
 			FileIDs = append(FileIDs, FileId)
 		}
@@ -161,7 +161,7 @@ func (db *DB) loadIndexDatafile() error {
 				ok = db.indexer.Put(LogRecord.Key, &LogRecord_)
 			}
 			if ok != true {
-				return index.IndexUpdateFail
+				return IndexUpdateFail
 			}
 			offset += size
 		}
@@ -231,11 +231,11 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	defer db.mu.RUnlock()
 
 	if len(key) == 0 {
-		return nil, index.KeyIsEmpty
+		return nil, KeyIsEmpty
 	}
 	logRecordPos := db.indexer.Get(key)
 	if logRecordPos == nil {
-		return nil, index.IndexNotFound
+		return nil, IndexNotFound
 	}
 	var dataFile *data.DataFile
 	if db.activeFile.FileId == logRecordPos.Fid {
@@ -244,7 +244,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		dataFile = db.oldFiles[logRecordPos.Fid]
 	}
 	if dataFile == nil {
-		return nil, index.DataFileNotExists
+		return nil, DataFileNotExists
 	}
 	//根据偏移量读取数据
 	buffer, _, err := dataFile.ReadDataFile(logRecordPos.Offset)
@@ -252,14 +252,14 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, err
 	}
 	if buffer.Type == data.LOG_RECORD_TYPE_DLETED {
-		return nil, index.KeyNotExists
+		return nil, KeyNotExists
 	}
 	return buffer.Val, nil
 }
 func (db *DB) Delete(key []byte) error {
 	//判断key
 	if len(key) == 0 {
-		return index.KeyIsEmpty
+		return KeyIsEmpty
 	}
 	//先查找内存中是否存在该键
 	if db.indexer.Get(key) == nil {
@@ -279,7 +279,7 @@ func (db *DB) Delete(key []byte) error {
 	}
 	//存入内存索引
 	if ok := db.indexer.Delete(key); !ok {
-		return index.IndexUpdateFail
+		return IndexUpdateFail
 	}
 
 	return nil

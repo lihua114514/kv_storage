@@ -1,4 +1,4 @@
-package index
+package bitcask_go
 
 import "errors"
 

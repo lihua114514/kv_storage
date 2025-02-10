@@ -1,7 +1,5 @@
 package fio
 
-const DataFilePerm = 0744
-
 type IOManager interface {
 	Read([]byte, int64) (int, error)
 	Write([]byte) (int, error)
