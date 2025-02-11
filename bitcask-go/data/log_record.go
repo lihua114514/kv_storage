@@ -88,11 +88,6 @@ func DecodeRecordHeader(bytes []byte) (*LogRecordHeader, int) {
 	return header, index
 }
 
-// 对读取的内容进行解码
-func DeLogRecord(bytes []byte) (*LogRecord, uint32) {
-	return nil, 0
-}
-
 // 获取CRC校验码
 func GetLogRecordCrc(record *LogRecord, header []byte) uint32 {
 	if record == nil {

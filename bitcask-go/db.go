@@ -284,3 +284,7 @@ func (db *DB) Delete(key []byte) error {
 
 	return nil
 }
+func (db *DB) Close() error {
+
+	return nil
+}

@@ -64,13 +64,13 @@ func (df *DataFile) ReadDataFile(offset uint32) (*LogRecord, uint32, error) {
 	//正式读取数值
 	logRecord := &LogRecord{Type: header.recType}
 	var recordSize = header.keySize + header.valSize + uint32(headSize)
-	if keySize > 0 && valSize > 0 {
+	if keySize > 0 || valSize > 0 {
 		kvBuf, err := df.ReadNBytes(uint32(keySize+valSize), int64(int(offset)+(headSize)))
 		if err != nil {
 			return nil, 0, err
 		}
 		logRecord.Key = kvBuf[:keySize]
-		logRecord.Val = kvBuf[keySize : headSize+valSize]
+		logRecord.Val = kvBuf[keySize:]
 	}
 
 	//进行CRC检测
@@ -102,9 +102,6 @@ func (df *DataFile) Close() error {
 func (df *DataFile) ReadNBytes(n uint32, offset int64) ([]byte, error) {
 	//offset是读取开始的位置
 	buffer := make([]byte, n)
-	_, err := df.IoManger.Read(buffer, offset)
-	if err != nil {
-		return nil, err
-	}
+	df.IoManger.Read(buffer, offset)
 	return buffer, nil
 }
