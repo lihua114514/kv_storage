@@ -74,7 +74,7 @@ func (df *DataFile) ReadDataFile(offset uint32) (*LogRecord, uint32, error) {
 	}
 
 	//进行CRC检测
-	var crcRead_ = getLogRecordCrc(logRecord, HeaderBuffer[crc32.Size:headSize])
+	var crcRead_ = GetLogRecordCrc(logRecord, HeaderBuffer[crc32.Size:headSize])
 	if crcRead_ != header.crc {
 		return nil, 0, errors.New("invalid crc")
 	}
