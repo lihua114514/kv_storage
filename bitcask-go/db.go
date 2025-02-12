@@ -14,9 +14,9 @@ import (
 
 type DB struct {
 	option     Options
-	mu         *sync.RWMutex
-	activeFile *data.DataFile
-	fileIDs    []int //目录下的数据文件，只能在加载数据的时候使用
+	mu         *sync.RWMutex  //互斥锁
+	activeFile *data.DataFile //活跃文件
+	fileIDs    []int          //目录下的数据文件，只能在加载数据的时候使用
 	oldFiles   map[uint32]*data.DataFile
 	indexer    index.Indexer
 }
@@ -266,9 +266,6 @@ func (db *DB) Delete(key []byte) error {
 		//若不存在该键，直接返回
 		return nil
 	}
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
 	LogRecord_ := &data.LogRecord{
 		Key:  key,
 		Type: data.LOG_RECORD_TYPE_DLETED,

@@ -53,7 +53,7 @@ func TestDataFile_Sync(t *testing.T) {
 	assert.Nil(t, err)
 }
 func TestDataFile_Read(t *testing.T) {
-	dataFile, err := OpenDataFile(os.TempDir(), 3011996)
+	dataFile, err := OpenDataFile("/home/lihua/kv_storage/bitcask-go/test_data", 3511996)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile)
 	lr := &LogRecord{
