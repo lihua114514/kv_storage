@@ -10,6 +10,7 @@ type LogRecordType = byte
 const (
 	LOG_RECORD_TYPE_NOMAL LogRecordType = iota
 	LOG_RECORD_TYPE_DLETED
+	LOG_RECORD_TXN_FINISHED
 )
 
 // MaxLogRecordSize crc type keySize valueSize
@@ -31,6 +32,12 @@ type LogRecordHeader struct {
 	recType LogRecordType //记录类型
 	keySize uint32        //键
 	valSize uint32        //值的大小
+}
+
+// TransactionRecord 暂存的事务相关的数据
+type TransactionRecord struct {
+	Record *LogRecord
+	Pos    *LogRecordPos
 }
 
 // EnLogRecord :对传入的logrecord记录进行编码，返回字节数组和数字

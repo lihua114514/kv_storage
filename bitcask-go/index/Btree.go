@@ -1,14 +1,26 @@
 package index
 
 import (
-	"github.com/google/btree"
+	"bytes"
 	"kv_storage/bitcask-go/data"
+	"sort"
 	"sync"
+
+	"github.com/google/btree"
 )
 
 type Btree struct {
 	tree *btree.BTree
 	lock *sync.RWMutex
+}
+
+type BtreeItem struct {
+	//当前遍历的位置
+	currentNum int
+	//是否是反向遍历
+	reverse bool
+	//存储的索引值
+	value []*Item
 }
 
 func NewBtree() *Btree {
@@ -42,10 +54,73 @@ func (bt *Btree) Delete(key []byte) bool {
 	bt.lock.Lock()
 	oldItem := bt.tree.Delete(it)
 	bt.lock.Unlock()
-	if oldItem == nil {
-
+	if oldItem != nil {
 		return false
 	}
+	return oldItem != nil
+}
 
-	return true
+func NewBtreeItem(tree *btree.BTree, reverse bool) *BtreeItem {
+	var idx int = 0
+	it := make([]*Item, tree.Len())
+	if !reverse {
+		tree.Ascend(func(i btree.Item) bool {
+			it[idx] = i.(*Item)
+			idx++
+			return true
+		})
+	} else {
+		tree.Descend(func(i btree.Item) bool {
+			it[idx] = i.(*Item)
+			idx++
+			return true
+		})
+	}
+
+	return &BtreeItem{
+		currentNum: 0,
+		reverse:    reverse,
+		value:      it,
+	}
+}
+
+func (Bit *BtreeItem) Seek(key []byte) {
+	if Bit.reverse {
+		Bit.currentNum = sort.Search(len(Bit.value), func(i int) bool {
+			return bytes.Compare(Bit.value[i].key, key) <= 0
+		})
+	} else {
+		Bit.currentNum = sort.Search(len(Bit.value), func(i int) bool {
+			return bytes.Compare(Bit.value[i].key, key) >= 0
+		})
+	}
+}
+
+func (Bit *BtreeItem) Valid() bool {
+	return Bit.currentNum < len(Bit.value)
+}
+func (Bit *BtreeItem) Rewind() {
+	Bit.currentNum = 0
+}
+func (Bit *BtreeItem) Key() []byte {
+
+	return Bit.value[Bit.currentNum].key
+}
+func (Bit *BtreeItem) Value() *data.LogRecordPos {
+	return Bit.value[Bit.currentNum].pos
+}
+func (Bit *BtreeItem) Next() {
+	Bit.currentNum++
+}
+func (Bit *BtreeItem) Close() {
+	Bit.value = nil
+}
+func (bt *Btree) Iterator(reverse bool) Iterator {
+	if bt == nil {
+		bt = NewBtree()
+	}
+	return NewBtreeItem(bt.tree, reverse)
+}
+func (bt *Btree) Size() int {
+	return bt.tree.Len()
 }

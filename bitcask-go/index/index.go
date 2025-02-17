@@ -1,14 +1,18 @@
 package index
 
 import (
-	"github.com/google/btree"
 	"kv_storage/bitcask-go/data"
+
+	"github.com/google/btree"
 )
 
 type Indexer interface {
 	Put(key []byte, pos *data.LogRecordPos) bool
 	Get(key []byte) *data.LogRecordPos
 	Delete(key []byte) bool
+	Iterator(reverse bool) Iterator
+	// Size 索引中的数据量
+	Size() int
 }
 
 type IndexType = int8
@@ -19,6 +23,8 @@ const (
 
 	//自适应基数树
 	ART
+	//跳表
+	SKIPLIST
 )
 
 // 用于初始化索引的方法
@@ -29,9 +35,11 @@ func NewIndexer(typ IndexType) Indexer {
 	case ART:
 		//TODO
 		return nil
+	case SKIPLIST:
+		return NewSkipList()
 	default:
 		panic("unknown index type")
-		return nil
+
 	}
 }
 
@@ -43,4 +51,15 @@ type Item struct {
 func (aItem *Item) Less(bItem btree.Item) bool {
 	// 比较逻辑: 通过 key 来进行排序
 	return string(aItem.key) < string(bItem.(*Item).key)
+}
+
+// 用于便利索引的接口
+type Iterator interface {
+	Seek(key []byte)
+	Valid() bool
+	Rewind()
+	Key() []byte
+	Value() *data.LogRecordPos
+	Next()
+	Close()
 }

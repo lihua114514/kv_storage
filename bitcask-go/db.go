@@ -15,6 +15,7 @@ import (
 type DB struct {
 	option     Options
 	mu         *sync.RWMutex  //互斥锁
+	seqNo      uint64         // 事务序列号，全局递增
 	activeFile *data.DataFile //活跃文件
 	fileIDs    []int          //目录下的数据文件，只能在加载数据的时候使用
 	oldFiles   map[uint32]*data.DataFile
@@ -28,12 +29,12 @@ func (db *DB) Put(key []byte, value []byte) error {
 
 	//构造LogRecord结构体
 	LogRecord_ := &data.LogRecord{
-		Key:  key,
+		Key:  logRecordKeyWithSeq(key, nonTransactionSeqNo),
 		Val:  value,
 		Type: data.LOG_RECORD_TYPE_NOMAL,
 	}
 
-	pos, err := db.AppendLogRecord(LogRecord_)
+	pos, err := db.AppendLogRecordWithLock(LogRecord_)
 	if err != nil {
 		return err
 	}
@@ -131,6 +132,29 @@ func (db *DB) loadIndexDatafile() error {
 		//该数据库为空不做处理
 		return nil
 	}
+
+	updateIndex := func(key []byte, typ data.LogRecordType, pos *data.LogRecordPos) {
+		var ok bool = true
+		if typ == data.LOG_RECORD_TYPE_DLETED {
+			ok = db.indexer.Delete(key)
+			if !ok {
+				panic("fail to update index in memory")
+			}
+		} else {
+			ok = db.indexer.Put(key, pos)
+			if !ok {
+				panic("fail to update index in memory")
+			}
+		}
+		if !ok {
+			panic("fail to update index in memory")
+		}
+	}
+
+	// 暂存事务数据
+	transactionRecords := make(map[uint64][]*data.TransactionRecord)
+	var currentSeqNo = nonTransactionSeqNo
+
 	for i, fileID := range db.fileIDs {
 		var datafile *data.DataFile
 		var fid = uint32(fileID)
@@ -150,18 +174,31 @@ func (db *DB) loadIndexDatafile() error {
 				return err
 			}
 
-			LogRecord_ := data.LogRecordPos{
+			LogRecord_ := &data.LogRecordPos{
 				Fid:    fid,
 				Offset: offset,
 			}
-			var ok bool
-			if LogRecord.Type != data.LOG_RECORD_TYPE_NOMAL {
-				ok = db.indexer.Delete(LogRecord.Key)
+			// 解析 key，拿到事务序列号
+			realKey, seqNo := parseLogRecordKey(LogRecord.Key)
+			if seqNo == nonTransactionSeqNo {
+				updateIndex(LogRecord.Key, LogRecord.Type, LogRecord_)
 			} else {
-				ok = db.indexer.Put(LogRecord.Key, &LogRecord_)
+				// 事务完成，对应的 seq no 的数据可以更新到内存索引中
+				if LogRecord.Type == data.LOG_RECORD_TXN_FINISHED {
+					for _, txnRecord := range transactionRecords[seqNo] {
+						updateIndex(txnRecord.Record.Key, txnRecord.Record.Type, txnRecord.Pos)
+					}
+					delete(transactionRecords, seqNo)
+				} else {
+					LogRecord.Key = realKey
+					transactionRecords[seqNo] = append(transactionRecords[seqNo], &data.TransactionRecord{
+						Record: LogRecord,
+						Pos:    LogRecord_,
+					})
+				}
 			}
-			if ok != true {
-				return IndexUpdateFail
+			if seqNo > currentSeqNo {
+				currentSeqNo = seqNo
 			}
 			offset += size
 		}
@@ -170,11 +207,16 @@ func (db *DB) loadIndexDatafile() error {
 		}
 
 	}
+	db.seqNo = currentSeqNo
 	return nil
 }
-func (db *DB) AppendLogRecord(LogRecord *data.LogRecord) (*data.LogRecordPos, error) {
+
+func (db *DB) AppendLogRecordWithLock(LogRecord *data.LogRecord) (*data.LogRecordPos, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	return db.AppendLogRecord(LogRecord)
+}
+func (db *DB) AppendLogRecord(LogRecord *data.LogRecord) (*data.LogRecordPos, error) {
 
 	//判断当前活跃文件是否存在，因为数据库在写入的时候是没有文件生成的
 	//若不存在则初始化数据文件
@@ -237,6 +279,13 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	if logRecordPos == nil {
 		return nil, IndexNotFound
 	}
+
+	return db.PosGet(logRecordPos)
+}
+
+func (db *DB) PosGet(logRecordPos *data.LogRecordPos) ([]byte, error) {
+	//根据位置信息获取内容
+	//调用该函数时需要加锁
 	var dataFile *data.DataFile
 	if db.activeFile.FileId == logRecordPos.Fid {
 		dataFile = db.activeFile
@@ -267,10 +316,10 @@ func (db *DB) Delete(key []byte) error {
 		return nil
 	}
 	LogRecord_ := &data.LogRecord{
-		Key:  key,
+		Key:  logRecordKeyWithSeq(key, nonTransactionSeqNo),
 		Type: data.LOG_RECORD_TYPE_DLETED,
 	}
-	_, err := db.AppendLogRecord(LogRecord_)
+	_, err := db.AppendLogRecordWithLock(LogRecord_)
 	if err != nil {
 		return err
 	}
@@ -282,6 +331,68 @@ func (db *DB) Delete(key []byte) error {
 	return nil
 }
 func (db *DB) Close() error {
-
+	if db.activeFile == nil {
+		return nil
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if err := db.activeFile.Close(); err != nil {
+		return err
+	}
+	for _, file := range db.oldFiles {
+		if err := file.Close(); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+func (db *DB) ListKeys() [][]byte {
+	iterator := db.indexer.Iterator(false)
+	defer iterator.Close()
+	keys := make([][]byte, db.indexer.Size())
+	var idx int
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		keys[idx] = iterator.Key()
+		idx++
+	}
+	return keys
+}
+
+// Fold 获取所有的数据，并执行用户指定的操作，函数返回 false 时终止遍历
+func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	iterator := db.indexer.Iterator(false)
+	defer iterator.Close()
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		value, err := db.PosGet(iterator.Value())
+		if err != nil {
+			return err
+		}
+		if !fn(iterator.Key(), value) {
+			break
+		}
+	}
+	return nil
+}
+
+func DestroyDB(db *DB) {
+	if db != nil {
+		if db.activeFile != nil {
+			_ = db.Close()
+		}
+		err := os.RemoveAll(db.option.DirPath)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+func (db *DB) Sync() error {
+	if db.activeFile == nil {
+		return nil
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	return db.activeFile.Sync()
 }

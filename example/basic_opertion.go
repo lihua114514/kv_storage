@@ -7,7 +7,7 @@ import (
 
 func main() {
 	opts := bitcask_go.DefaultOptions
-	opts.DirPath = "//home/lihua/kv_storage/bitcask-go/test_data"
+	opts.DirPath = "/home/lihua/kv_storage/bitcask-go/test_data"
 	db, err := bitcask_go.Open(opts)
 	if err != nil {
 		panic(err)
