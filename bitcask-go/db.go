@@ -6,6 +6,7 @@ import (
 	"kv_storage/bitcask-go/data"
 	"kv_storage/bitcask-go/index"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,14 +14,20 @@ import (
 )
 
 type DB struct {
-	option     Options
-	mu         *sync.RWMutex  //互斥锁
-	seqNo      uint64         // 事务序列号，全局递增
-	activeFile *data.DataFile //活跃文件
-	fileIDs    []int          //目录下的数据文件，只能在加载数据的时候使用
-	oldFiles   map[uint32]*data.DataFile
-	indexer    index.Indexer
+	option      Options
+	mu          *sync.RWMutex  //互斥锁
+	seqNo       uint64         // 事务序列号，全局递增
+	activeFile  *data.DataFile //活跃文件
+	fileIDs     []int          //目录下的数据文件，只能在加载数据的时候使用
+	oldFiles    map[uint32]*data.DataFile
+	indexer     index.Indexer
+	isMerging   bool
+	reclaimSize int64 // 表示有多少数据是无效的
 }
+
+const (
+	fileLockName = "flock"
+)
 
 func (db *DB) Put(key []byte, value []byte) error {
 	if len(key) == 0 {
@@ -70,11 +77,17 @@ func Open(option Options) (*DB, error) {
 		oldFiles: make(map[uint32]*data.DataFile),
 		indexer:  index.NewIndexer(option.IndexType),
 	}
+	if err := db.loadMergeFiles(); err != nil {
+		return nil, err
+	}
+
 	//加载数据文件
 	if err := db.loadDatafile(); err != nil {
 		return nil, err
 	}
-
+	if err := db.loadIndexFromHintFile(); err != nil {
+		return nil, err
+	}
 	//从数据文件中加载索引
 	if err := db.loadIndexDatafile(); err != nil {
 		return nil, err
@@ -150,12 +163,25 @@ func (db *DB) loadIndexDatafile() error {
 			panic("fail to update index in memory")
 		}
 	}
+	hasmerge, fileNo := false, uint32(0)
+	fileName := filepath.Join(db.option.DirPath, data.MergeFinishedFileName)
+	if _, err := os.Stat(fileName); err == nil {
+		fileId, errs := db.getNonMergeFileId(db.option.DirPath)
+		if errs != nil {
+			return errs
+		}
+		hasmerge = true
+		fileNo = fileId
+	}
 
 	// 暂存事务数据
 	transactionRecords := make(map[uint64][]*data.TransactionRecord)
 	var currentSeqNo = nonTransactionSeqNo
 
 	for i, fileID := range db.fileIDs {
+		if hasmerge && fileID < int(fileNo) {
+			continue
+		}
 		var datafile *data.DataFile
 		var fid = uint32(fileID)
 		//将datafile 取出

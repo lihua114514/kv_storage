@@ -5,6 +5,15 @@ import "os"
 type FileIO struct {
 	fd *os.File
 }
+type FileIOType = byte
+
+const (
+	// StandardFIO 标准文件 IO
+	StandardFIO FileIOType = iota
+
+	// MemoryMap 内存文件映射
+	MemoryMap
+)
 
 func NewFileIOManager(filename string) (*FileIO, error) {
 	//os.MkdirAll(filename, 0744)

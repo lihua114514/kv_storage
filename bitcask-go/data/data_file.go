@@ -9,7 +9,12 @@ import (
 	"path/filepath"
 )
 
-const DataFilesuffix = ".data"
+const (
+	DataFilesuffix        = ".data"
+	HintFileName          = "hint-index"
+	MergeFinishedFileName = "merge-finished"
+	SeqNoFileName         = "seq-no"
+)
 
 type DataFile struct {
 	FileId      uint32        //文件的ID
@@ -20,17 +25,42 @@ type DataFile struct {
 func OpenDataFile(DirPath string, FileID uint32) (*DataFile, error) {
 	//打开数据文件
 	filename := filepath.Join(DirPath, fmt.Sprintf("%09d", FileID)+DataFilesuffix)
-	//os.MkdirAll(DirPath, 0744)
-	IoManger, err := fio.NewIOManager(filename)
+
+	return newDataFile(filename, FileID)
+}
+func newDataFile(fileName string, fileId uint32) (*DataFile, error) {
+	IoManger, err := fio.NewIOManager(fileName)
 	if err != nil {
 		return nil, err
 	}
 	DataFile := &DataFile{
-		FileId:      FileID,
+		FileId:      fileId,
 		WriteOffset: 0,
 		IoManger:    IoManger,
 	}
 	return DataFile, nil
+}
+
+// OpenHintFile 打开 Hint 索引文件
+func OpenHintFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, HintFileName)
+	return newDataFile(fileName, 0)
+}
+
+// OpenMergeFinishedFile 打开标识 merge 完成的文件
+func OpenMergeFinishedFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, MergeFinishedFileName)
+	return newDataFile(fileName, 0)
+}
+
+// OpenSeqNoFile 存储事务序列号的文件
+func OpenSeqNoFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, SeqNoFileName)
+	return newDataFile(fileName, 0)
+}
+
+func GetDataFileName(dirPath string, fileId uint32) string {
+	return filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFilesuffix)
 }
 
 func (df *DataFile) ReadDataFile(offset uint32) (*LogRecord, uint32, error) {
@@ -104,4 +134,12 @@ func (df *DataFile) ReadNBytes(n uint32, offset int64) ([]byte, error) {
 	buffer := make([]byte, n)
 	df.IoManger.Read(buffer, offset)
 	return buffer, nil
+}
+func (df *DataFile) WriteHintRecord(key []byte, pos *LogRecordPos) error {
+	record := &LogRecord{
+		Key: key,
+		Val: EncodeLogRecordPos(pos),
+	}
+	encRecord, _ := EnLogRecord(record)
+	return df.Write(encRecord)
 }

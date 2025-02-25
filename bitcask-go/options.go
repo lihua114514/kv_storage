@@ -9,6 +9,9 @@ type Options struct {
 	SyncWrite bool
 	//内存索引类型
 	IndexType IndexType
+	//是否写一次就持久化一次
+	SyncWrites         bool
+	DataFileMergeRatio float32
 }
 
 type IndexType = int8
