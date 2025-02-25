@@ -16,11 +16,6 @@ type Skiplist struct {
 	rand *rand.Rand
 }
 
-// Iterator implements Indexer.
-func (sl *Skiplist) Iterator(reverse bool) Iterator {
-	panic("unimplemented")
-}
-
 type Node struct {
 	key  []byte
 	pos  *data.LogRecordPos
@@ -31,6 +26,14 @@ type SkiplistIterator struct {
 	skiplist *Skiplist
 	current  *Node
 	level    int
+}
+
+func (sl *Skiplist) Iterator(reverse bool) Iterator {
+	if sl == nil {
+		return sl.NewIterator(false)
+	} else {
+		return sl.NewIterator(false)
+	}
 }
 
 // 查找一个键在文件中的位置

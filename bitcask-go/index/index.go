@@ -21,8 +21,8 @@ const (
 	//B树的索引
 	BTreeType IndexType = iota + 1
 
-	//自适应基数树
-	ART
+	//LSM树
+	LSM
 	//跳表
 	SKIPLIST
 )
@@ -32,7 +32,7 @@ func NewIndexer(typ IndexType) Indexer {
 	switch typ {
 	case BTreeType:
 		return NewBtree()
-	case ART:
+	case LSM:
 		//TODO
 		return nil
 	case SKIPLIST:
