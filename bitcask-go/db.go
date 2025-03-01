@@ -2,15 +2,20 @@ package bitcask_go
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"kv_storage/bitcask-go/data"
+	"kv_storage/bitcask-go/fio"
 	"kv_storage/bitcask-go/index"
+	"kv_storage/bitcask-go/utils"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/gofrs/flock"
 )
 
 type DB struct {
@@ -23,6 +28,16 @@ type DB struct {
 	indexer     index.Indexer
 	isMerging   bool
 	reclaimSize int64 // 表示有多少数据是无效的
+	filelock    *flock.Flock
+	bytesWrite  uint // 累计写了多少个字节
+}
+
+// Stat 存储引擎统计信息
+type Stat struct {
+	KeyNum          uint  // key 的总数量
+	DataFileNum     uint  // 数据文件的数量
+	ReclaimableSize int64 // 可以进行 merge 回收的数据量，字节为单位
+	DiskSize        int64 // 数据目录所占磁盘空间大小
 }
 
 const (
@@ -45,6 +60,7 @@ func (db *DB) Put(key []byte, value []byte) error {
 	if err != nil {
 		return err
 	}
+
 	//存入内存索引
 	if ok := db.indexer.Put(key, pos); !ok {
 		return IndexUpdateFail
@@ -66,16 +82,27 @@ func Open(option Options) (*DB, error) {
 	if err := checkOption(option); err != nil {
 		return nil, err
 	}
+
 	//检验传入的数据目录是否存在，若不存在，生成文件目录
 	if _, err := os.Stat(option.DirPath); err != nil {
 		return nil, err
 	}
+	filelock := flock.New(filepath.Join(option.DirPath, fileLockName))
+	hold, err := filelock.TryLock()
+	if err != nil {
+		return nil, err
+	}
+	if !hold {
+		return nil, ErrDataBaseIsUsing
+	}
+
 	//初始化数据库实例
 	db := &DB{
 		option:   option,
 		mu:       new(sync.RWMutex),
 		oldFiles: make(map[uint32]*data.DataFile),
 		indexer:  index.NewIndexer(option.IndexType),
+		filelock: filelock,
 	}
 	if err := db.loadMergeFiles(); err != nil {
 		return nil, err
@@ -93,6 +120,34 @@ func Open(option Options) (*DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+func (db *DB) Backup(dir string) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return utils.CopyDir(db.option.DirPath, dir, []string{fileLockName})
+}
+
+// Stat 返回数据库的相关统计信息
+func (db *DB) Stat() *Stat {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	var dataFiles = uint(len(db.oldFiles))
+	if db.activeFile != nil {
+		dataFiles += 1
+	}
+
+	dirSize, err := utils.DirSize(db.option.DirPath)
+	if err != nil {
+		panic(fmt.Sprintf("failed to get dir size : %v", err))
+	}
+	return &Stat{
+		KeyNum:          uint(db.indexer.Size()),
+		DataFileNum:     dataFiles,
+		ReclaimableSize: db.reclaimSize,
+		DiskSize:        dirSize,
+	}
 }
 
 // 从磁盘中加载数据文件
@@ -121,7 +176,7 @@ func (db *DB) loadDatafile() error {
 
 	//遍历每个文件
 	for i, FileID := range FileIDs {
-		datafile, err := data.OpenDataFile(db.option.DirPath, uint32(FileID))
+		datafile, err := data.OpenDataFile(db.option.DirPath, uint32(FileID), fio.StandardFIO)
 		if err != nil {
 			return err
 		}
@@ -269,9 +324,20 @@ func (db *DB) AppendLogRecord(LogRecord *data.LogRecord) (*data.LogRecordPos, er
 	if err := db.activeFile.Write(EncRecord); err != nil {
 		return nil, err
 	}
-	if db.option.SyncWrite {
+
+	db.bytesWrite += uint(size)
+	// 根据用户配置决定是否持久化
+	var needSync = db.option.SyncWrites
+	if !needSync && db.option.WriteByte > 0 && db.bytesWrite >= db.option.WriteByte {
+		needSync = true
+	}
+	if needSync {
 		if err := db.activeFile.Sync(); err != nil {
 			return nil, err
+		}
+		// 清空累计值
+		if db.bytesWrite > 0 {
+			db.bytesWrite = 0
 		}
 	}
 	pos := &data.LogRecordPos{
@@ -286,7 +352,7 @@ func (db *DB) setActiveFile() error {
 		initialFileId = db.activeFile.FileId + 1
 	}
 
-	datafile, err := data.OpenDataFile(db.option.DirPath, initialFileId)
+	datafile, err := data.OpenDataFile(db.option.DirPath, initialFileId, fio.StandardFIO)
 	if err != nil {
 		return err
 	}
@@ -357,6 +423,11 @@ func (db *DB) Delete(key []byte) error {
 	return nil
 }
 func (db *DB) Close() error {
+	defer func() {
+		if err := db.filelock.Unlock(); err != nil {
+			panic("fail to unlock filelock")
+		}
+	}()
 	if db.activeFile == nil {
 		return nil
 	}
@@ -401,6 +472,27 @@ func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
 		}
 	}
 	return nil
+}
+
+func (db *DB) loadSeqNo() error {
+	fileName := filepath.Join(db.option.DirPath, data.SeqNoFileName)
+	if _, err := os.Stat(fileName); os.IsNotExist(err) {
+		return nil
+	}
+
+	seqNoFile, err := data.OpenSeqNoFile(db.option.DirPath)
+	if err != nil {
+		return err
+	}
+	record, _, err := seqNoFile.ReadDataFile(0)
+	seqNo, err := strconv.ParseUint(string(record.Val), 10, 64)
+	if err != nil {
+		return err
+	}
+	db.seqNo = seqNo
+	//db.seqNoFileExists = true
+
+	return os.Remove(fileName)
 }
 
 func DestroyDB(db *DB) {

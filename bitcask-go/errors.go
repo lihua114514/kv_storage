@@ -13,4 +13,5 @@ var (
 	ErrMergeIsProgress       = errors.New("Merge is progressing")
 	ErrMergeRatioUnreached   = errors.New("MergeRatio is unreached")
 	ErrNoEnoughSpaceForMerge = errors.New("No enough space")
+	ErrDataBaseIsUsing       = errors.New("DataBase is using ")
 )

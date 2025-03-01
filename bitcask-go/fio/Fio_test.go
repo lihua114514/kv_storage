@@ -1,10 +1,11 @@
 package fio
 
 import (
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func destroyFile(name string) {
@@ -15,7 +16,7 @@ func destroyFile(name string) {
 
 func TestNewFileIOManager(t *testing.T) {
 	path := filepath.Join("/tmp", "a.data")
-	fio, err := NewIOManager(path)
+	fio, err := NewIOManager(path, StandardFIO)
 	defer destroyFile(path)
 
 	assert.Nil(t, err)
@@ -24,7 +25,7 @@ func TestNewFileIOManager(t *testing.T) {
 
 func TestFileIO_Write(t *testing.T) {
 	path := filepath.Join("/tmp", "a.data")
-	fio, err := NewIOManager(path)
+	fio, err := NewIOManager(path, StandardFIO)
 	defer destroyFile(path)
 
 	assert.Nil(t, err)
@@ -45,7 +46,7 @@ func TestFileIO_Write(t *testing.T) {
 
 func TestFileIO_Read(t *testing.T) {
 	path := filepath.Join("/tmp", "a.data")
-	fio, err := NewIOManager(path)
+	fio, err := NewIOManager(path, StandardFIO)
 	defer destroyFile(path)
 
 	assert.Nil(t, err)
@@ -70,7 +71,7 @@ func TestFileIO_Read(t *testing.T) {
 
 func TestFileIO_Sync(t *testing.T) {
 	path := filepath.Join("/tmp", "a.data")
-	fio, err := NewIOManager(path)
+	fio, err := NewIOManager(path, StandardFIO)
 	defer destroyFile(path)
 
 	assert.Nil(t, err)
@@ -82,7 +83,7 @@ func TestFileIO_Sync(t *testing.T) {
 
 func TestFileIO_Close(t *testing.T) {
 	path := filepath.Join("/tmp", "a.data")
-	fio, err := NewIOManager(path)
+	fio, err := NewIOManager(path, StandardFIO)
 	defer destroyFile(path)
 
 	assert.Nil(t, err)

@@ -10,7 +10,10 @@ type Options struct {
 	//内存索引类型
 	IndexType IndexType
 	//是否写一次就持久化一次
-	SyncWrites         bool
+	SyncWrites bool
+	//写入多少字节进行持久化
+	WriteByte uint
+
 	DataFileMergeRatio float32
 }
 

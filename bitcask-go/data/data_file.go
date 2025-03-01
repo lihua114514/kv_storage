@@ -22,14 +22,15 @@ type DataFile struct {
 	IoManger    fio.IOManager //用于文件IO
 }
 
-func OpenDataFile(DirPath string, FileID uint32) (*DataFile, error) {
+func OpenDataFile(DirPath string, FileID uint32, IoType fio.FileIOType) (*DataFile, error) {
 	//打开数据文件
 	filename := filepath.Join(DirPath, fmt.Sprintf("%09d", FileID)+DataFilesuffix)
 
-	return newDataFile(filename, FileID)
+	return newDataFile(filename, FileID, IoType)
 }
-func newDataFile(fileName string, fileId uint32) (*DataFile, error) {
-	IoManger, err := fio.NewIOManager(fileName)
+func newDataFile(fileName string, fileId uint32, ioType fio.FileIOType) (*DataFile, error) {
+	//启动时使用MMap方式或者标准IO模式进行IO
+	IoManger, err := fio.NewIOManager(fileName, ioType)
 	if err != nil {
 		return nil, err
 	}
@@ -44,19 +45,19 @@ func newDataFile(fileName string, fileId uint32) (*DataFile, error) {
 // OpenHintFile 打开 Hint 索引文件
 func OpenHintFile(dirPath string) (*DataFile, error) {
 	fileName := filepath.Join(dirPath, HintFileName)
-	return newDataFile(fileName, 0)
+	return newDataFile(fileName, 0, fio.StandardFIO)
 }
 
 // OpenMergeFinishedFile 打开标识 merge 完成的文件
 func OpenMergeFinishedFile(dirPath string) (*DataFile, error) {
 	fileName := filepath.Join(dirPath, MergeFinishedFileName)
-	return newDataFile(fileName, 0)
+	return newDataFile(fileName, 0, fio.StandardFIO)
 }
 
 // OpenSeqNoFile 存储事务序列号的文件
 func OpenSeqNoFile(dirPath string) (*DataFile, error) {
 	fileName := filepath.Join(dirPath, SeqNoFileName)
-	return newDataFile(fileName, 0)
+	return newDataFile(fileName, 0, fio.StandardFIO)
 }
 
 func GetDataFileName(dirPath string, fileId uint32) string {

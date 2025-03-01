@@ -1,14 +1,16 @@
 package data
 
 import (
-	"github.com/stretchr/testify/assert"
+	"kv_storage/bitcask-go/fio"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestOpenDataFile(t *testing.T) {
 	Dir := os.TempDir()
-	dataFile1, err := OpenDataFile(Dir, 0)
+	dataFile1, err := OpenDataFile(Dir, 0, fio.StandardFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile1)
 
@@ -25,13 +27,13 @@ func TestOpenDataFile(t *testing.T) {
 }
 func TestDataFile_Write(t *testing.T) {
 	Dir := os.TempDir()
-	dataFile1, err := OpenDataFile(Dir, 0)
+	dataFile1, err := OpenDataFile(Dir, 0, fio.StandardFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile1)
 
 }
 func TestDataFile_Close(t *testing.T) {
-	dataFile, err := OpenDataFile(os.TempDir(), 123)
+	dataFile, err := OpenDataFile(os.TempDir(), 123, fio.StandardFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile)
 
@@ -42,7 +44,7 @@ func TestDataFile_Close(t *testing.T) {
 	assert.Nil(t, err)
 }
 func TestDataFile_Sync(t *testing.T) {
-	dataFile, err := OpenDataFile(os.TempDir(), 456)
+	dataFile, err := OpenDataFile(os.TempDir(), 456, fio.StandardFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile)
 
@@ -53,7 +55,7 @@ func TestDataFile_Sync(t *testing.T) {
 	assert.Nil(t, err)
 }
 func TestDataFile_Read(t *testing.T) {
-	dataFile, err := OpenDataFile("/home/lihua/kv_storage/bitcask-go/test_data", 3511996)
+	dataFile, err := OpenDataFile("/home/lihua/kv_storage/bitcask-go/test_data", 3511996, fio.StandardFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile)
 	lr := &LogRecord{
