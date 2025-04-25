@@ -2,7 +2,7 @@ package bitcask_go
 
 import (
 	"github.com/stretchr/testify/assert"
-	"kv_storage/bitcask-go/utils"
+	"github.com/lihua114514/kv_storage/bitcask-go/utils"
 	"os"
 	"testing"
 )

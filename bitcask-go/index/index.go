@@ -1,7 +1,7 @@
 package index
 
 import (
-	"kv_storage/bitcask-go/data"
+	"github.com/lihua114514/kv_storage/bitcask-go/data"
 
 	"github.com/google/btree"
 )

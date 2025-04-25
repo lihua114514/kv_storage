@@ -1,7 +1,7 @@
 package bitcask_go
 
 import (
-	"kv_storage/bitcask-go/utils"
+	"github.com/lihua114514/kv_storage/bitcask-go/utils"
 	"os"
 	"testing"
 

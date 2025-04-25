@@ -2,7 +2,8 @@ package bitcask_go
 
 import (
 	"bytes"
-	"kv_storage/bitcask-go/index"
+
+	"github.com/lihua114514/kv_storage/bitcask-go/index"
 )
 
 type Iterator struct {

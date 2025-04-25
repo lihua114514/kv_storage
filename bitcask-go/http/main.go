@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	bitcask_go "kv_storage/bitcask-go"
+	bitcask_go "github.com/lihua114514/kv_storage/bitcask-go"
 	"log"
 	"net/http"
 	"os"

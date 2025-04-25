@@ -3,9 +3,10 @@ package index
 import (
 	"bytes"
 	//"fmt"
-	"kv_storage/bitcask-go/data"
 	"math/rand"
 	"time"
+
+	"github.com/lihua114514/kv_storage/bitcask-go/data"
 )
 
 const MAXLEVEL int = 10

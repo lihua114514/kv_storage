@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	bitcask_go "kv_storage/bitcask-go"
+
+	bitcask_go "github.com/lihua114514/kv_storage/bitcask-go"
 )
 
 func main() {

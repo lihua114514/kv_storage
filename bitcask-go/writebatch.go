@@ -2,7 +2,7 @@ package bitcask_go
 
 import (
 	"encoding/binary"
-	"kv_storage/bitcask-go/data"
+	"github.com/lihua114514/kv_storage/bitcask-go/data"
 	"sync"
 	"sync/atomic"
 )

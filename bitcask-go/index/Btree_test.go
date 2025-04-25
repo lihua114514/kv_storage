@@ -2,7 +2,7 @@ package index
 
 import (
 	"github.com/stretchr/testify/assert"
-	"kv_storage/bitcask-go/data"
+	"github.com/lihua114514/kv_storage/bitcask-go/data"
 	"testing"
 )
 

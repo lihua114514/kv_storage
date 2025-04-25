@@ -2,8 +2,8 @@ package bitcask_go
 
 import (
 	"io"
-	"kv_storage/bitcask-go/data"
-	"kv_storage/bitcask-go/utils"
+	"github.com/lihua114514/kv_storage/bitcask-go/data"
+	"github.com/lihua114514/kv_storage/bitcask-go/utils"
 	"os"
 	"path"
 	"path/filepath"
